@@ -1,0 +1,228 @@
+load("@musl-libc//bazel:musl_config.bzl", "musl_srcs")
+
+config_setting(
+    name = "is_x86_64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_i386",
+    constraint_values = [
+        "@platforms//cpu:i386",
+    ],
+)
+
+config_setting(
+    name = "is_aarch64",
+    constraint_values = [
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+config_setting(
+    name = "is_arm",
+    constraint_values = [
+        "@platforms//cpu:arm",
+    ],
+)
+
+genrule(
+    name = "alltypes",
+    srcs = [
+        "tools/mkalltypes.sed",
+    ] + select({
+        ":is_x86_64": ["arch/x86_64/bits/alltypes.h.in"],
+        ":is_aarch64": ["arch/aarch64/bits/alltypes.h.in"],
+        ":is_arm": ["arch/arm/bits/alltypes.h.in"],
+        ":is_i386": ["arch/i386/bits/alltypes.h.in"],
+        "//conditions:default": ["arch/generic/bits/alltypes.h.in"],
+    }) + [
+        "include/alltypes.h.in",
+    ],
+    outs = [
+        "include/bits/alltypes.h",
+    ],
+    cmd = "sed -f $(SRCS) > $@",
+)
+
+genrule(
+    name = "version",
+    srcs = [
+        "VERSION",
+    ],
+    outs = [
+        "src/internal/version.h",
+    ],
+    cmd = "printf \'#define VERSION \"%s\"' $$(cat $(location VERSION)) >> $@",
+)
+
+genrule(
+    name = "syscalls",
+    srcs = select({
+        ":is_x86_64": ["arch/x86_64/bits/syscall.h.in"],
+        ":is_aarch64": ["arch/aarch64/bits/syscall.h.in"],
+        ":is_arm": ["arch/arm/bits/syscall.h.in"],
+        ":is_i386": ["arch/i386/bits/syscall.h.in"],
+        "//conditions:default": ["arch/generic/bits/syscall.h.in"],
+    }),
+    outs = [
+        "include/bits/syscall.h",
+    ],
+    cmd = "cp $< $@; sed -n -e s/__NR_/SYS_/p < $< >> $@",
+)
+
+musl_copts = [
+    "-std=c99",
+    "-D_XOPEN_SOURCE=700",
+    "-nostdinc",
+    "-ffreestanding",
+    "-fno-builtin",
+    "-fno-stack-protector",
+    "-fomit-frame-pointer",
+    "-fno-unwind-tables",
+    "-fno-asynchronous-unwind-tables",
+    "-ffunction-sections",
+    "-fdata-sections",
+    "-Wall",
+    "-Wno-parentheses",
+    "-Wno-uninitialized",
+    "-Wno-missing-braces",
+    "-Wno-unused-value",
+    "-Wno-unknown-pragmas",
+    "-Wno-pointer-to-int-cast",
+]
+
+cc_library(
+    name = "crt1",
+    srcs = [
+        "crt/crt1.c",
+        ":alltypes",
+    ] + glob(["**/*.h"]),
+    hdrs = glob(["include/**/*.h"]),
+    copts = musl_copts +
+            select({
+                ":is_x86_64": ["-I external/musl/arch/x86_64"],
+                ":is_aarch64": ["-I external/musl/arch/aarch64"],
+                ":is_arm": ["-I external/musl/arch/arm"],
+                ":is_i386": ["-I external/musl/arch/i386"],
+                "//conditions:default": [],
+            }) + [
+        "-I external/musl/src/internal",
+        "-I $(GENDIR)/external/musl/src/internal",
+        "-I external/musl/src/include",
+        "-I external/musl/arch/generic",
+    ],
+    includes = [
+        "include",
+    ],
+    linkstatic = True,
+    visibility = ["//visibility:public"],
+    alwayslink = True,
+)
+
+LIBC_SRCS = glob(["src/*/*.c"]) + glob(["src/malloc/mallocng/*.c"])
+
+LIBC_SRCS_ARCH = select({
+    ":is_x86_64": glob(["src/*/x86_64/*.c"]),
+    ":is_aarch64": glob(["src/*/aarch64/*.c"]),
+    ":is_arm": glob(["src/*/arm/*.c"]),
+    ":is_i386": glob(["src/*/i386/*.c"]),
+    "//conditions:default": [],
+}) + select({
+    ":is_x86_64": glob(["src/*/x86_64/*.s"]),
+    ":is_aarch64": glob(["src/*/aarch64/*.s"]),
+    ":is_arm": glob(["src/*/arm/*.s"]),
+    ":is_i386": glob(["src/*/i386/*.s"]),
+    "//conditions:default": [],
+}) + select({
+    ":is_x86_64": glob(["src/*/x86_64/*.S"]),
+    ":is_aarch64": glob(["src/*/aarch64/*.S"]),
+    ":is_arm": glob(["src/*/arm/*.S"]),
+    ":is_i386": glob(["src/*/i386/*.S"]),
+    "//conditions:default": [],
+}) + select({
+    ":is_x86_64": glob(["src/malloc/mallocng/x86_64/*.c"]),
+    ":is_aarch64": glob(["src/malloc/mallocng/aarch64/*.c"]),
+    ":is_arm": glob(["src/malloc/mallocng/arm/*.c"]),
+    ":is_i386": glob(["src/malloc/mallocng/i386/*.c"]),
+    "//conditions:default": [],
+}) + select({
+    ":is_x86_64": glob(["src/malloc/mallocng/x86_64/*.s"]),
+    ":is_aarch64": glob(["src/malloc/mallocng/aarch64/*.s"]),
+    ":is_arm": glob(["src/malloc/mallocng/arm/*.s"]),
+    ":is_i386": glob(["src/malloc/mallocng/i386/*.s"]),
+    "//conditions:default": [],
+}) + select({
+    ":is_x86_64": glob(["src/malloc/mallocng/x86_64/*.S"]),
+    ":is_aarch64": glob(["src/malloc/mallocng/aarch64/*.S"]),
+    ":is_arm": glob(["src/malloc/mallocng/arm/*.S"]),
+    ":is_i386": glob(["src/malloc/mallocng/i386/*.S"]),
+    "//conditions:default": [],
+})
+
+musl_srcs(
+    name = "musl_srcs_files",
+    srcs = LIBC_SRCS,
+    arch = select({
+        ":is_x86_64": "x86_64",
+        ":is_aarch64": "aarch64",
+        ":is_arm": "arm",
+        ":is_i386": "i386",
+        "//conditions:default": "",
+    }),
+    arch_srcs = LIBC_SRCS_ARCH,
+)
+
+cc_library(
+    name = "c",
+    srcs = [
+        ":musl_srcs_files",
+        ":version",
+    ] + glob(["**/*.h"]),
+    hdrs = [
+        ":alltypes",
+        ":syscalls",
+    ] + glob(["include/**/*.h"]),
+    copts = musl_copts +
+            select({
+                ":is_x86_64": ["-I external/musl/arch/x86_64"],
+                ":is_aarch64": ["-I external/musl/arch/aarch64"],
+                ":is_arm": ["-I external/musl/arch/arm"],
+                ":is_i386": ["-I external/musl/arch/i386"],
+                "//conditions:default": [],
+            }) + [
+        "-I external/musl/src/internal",
+        "-I $(GENDIR)/external/musl/src/internal",
+        "-I external/musl/src/include",
+        "-I external/musl/arch/generic",
+    ],
+    includes = ["include"],
+    linkstatic = True,
+    textual_hdrs = select(
+        {
+            ":is_aarch64": [
+                "src/math/fma.c",
+                "src/math/fmaf.c",
+            ],
+            ":is_arm": [
+                "src/math/fma.c",
+                "src/math/fmaf.c",
+                "src/ldso/arm/dlsym.s",
+                "src/fenv/fenv.c",
+                "src/math/sqrtf.c",
+                "src/math/fabsf.c",
+                "src/math/fabs.c",
+                "src/math/sqrt.c",
+            ],
+            ":is_x86_64": [
+                "src/math/fma.c",
+                "src/math/fmaf.c",
+            ],
+            ":is_i386": ["src/ldso/i386/dlsym.s"],
+            "//conditions:default": [],
+        },
+    ),
+    visibility = ["//visibility:public"],
+)
