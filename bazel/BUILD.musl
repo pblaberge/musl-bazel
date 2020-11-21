@@ -1,4 +1,5 @@
 load("@musl-libc//bazel:musl_config.bzl", "musl_srcs")
+load("@musl-libc//bazel:cc_defs.bzl", "cc_library")
 
 config_setting(
     name = "static_mode_build",
@@ -322,24 +323,28 @@ cc_library(
     hdrs = [
         ":alltypes",
         ":syscalls",
-    ] + glob(["include/**/*.h"]),
-    copts = musl_copts +
-            select({
-                ":is_x86_64": ["-I external/musl/arch/x86_64"],
-                ":is_aarch64": ["-I external/musl/arch/aarch64"],
-                ":is_arm": ["-I external/musl/arch/arm"],
-                ":is_i386": ["-I external/musl/arch/i386"],
-                "//conditions:default": [],
-            }) + [
+    ] + glob(["include/**/*.h"]) + select({
+        ":is_x86_64": glob(["arch/x86_64/**/*.h"]),
+        ":is_aarch64": glob(["arch/aarch64/**/*.h"]),
+        ":is_arm": glob(["arch/arm/**/*.h"]),
+        ":is_i386": glob(["arch/i386/**/*.h"]),
+        "//conditions:default": [],
+    }) + glob(["arch/generic/**/*.h"]),
+    copts = musl_copts + [
         "-I external/musl/src/internal",
         "-I $(GENDIR)/external/musl/src/internal",
         "-I external/musl/src/include",
-        "-I external/musl/arch/generic",
         "-Wno-unused-command-line-argument",
         "-Wno-string-plus-int",
         "-Wno-ignored-attributes",
     ],
-    includes = ["include"],
+    includes = ["include"] + select({
+        ":is_x86_64": ["arch/x86_64"],
+        ":is_aarch64": ["arch/aarch64"],
+        ":is_arm": ["arch/arm"],
+        ":is_i386": ["arch/i386"],
+        "//conditions:default": [],
+    }) + ["arch/generic"],
     linkopts = select(
         {
             ":static_mode_build_pic": ["-static-pie"],
