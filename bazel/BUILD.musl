@@ -1,6 +1,21 @@
 load("@musl-libc//bazel:musl_config.bzl", "musl_srcs")
 
 config_setting(
+    name = "static_mode_build",
+    values = {
+        "dynamic_mode": "off",
+    },
+)
+
+config_setting(
+    name = "static_mode_build_pic",
+    values = {
+        "dynamic_mode": "off",
+        "force_pic": "true",
+    },
+)
+
+config_setting(
     name = "is_x86_64",
     constraint_values = [
         "@platforms//cpu:x86_64",
@@ -113,11 +128,134 @@ cc_library(
         "-I $(GENDIR)/external/musl/src/internal",
         "-I external/musl/src/include",
         "-I external/musl/arch/generic",
+        "-fno-lto",
     ],
     includes = [
         "include",
     ],
     linkstatic = True,
+    visibility = ["//visibility:public"],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "crti",
+    srcs = [
+        "crt/crti.c",
+        ":alltypes",
+    ] + glob(["**/*.h"]),
+    hdrs = glob(["include/**/*.h"]),
+    copts = musl_copts +
+            select({
+                ":is_x86_64": ["-I external/musl/arch/x86_64"],
+                ":is_aarch64": ["-I external/musl/arch/aarch64"],
+                ":is_arm": ["-I external/musl/arch/arm"],
+                ":is_i386": ["-I external/musl/arch/i386"],
+                "//conditions:default": [],
+            }) + [
+        "-I external/musl/src/internal",
+        "-I $(GENDIR)/external/musl/src/internal",
+        "-I external/musl/src/include",
+        "-I external/musl/arch/generic",
+        "-fno-lto",
+    ],
+    includes = [
+        "include",
+    ],
+    linkstatic = True,
+    visibility = ["//visibility:public"],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "crtn",
+    srcs = [
+        "crt/crtn.c",
+        ":alltypes",
+    ] + glob(["**/*.h"]),
+    hdrs = glob(["include/**/*.h"]),
+    copts = musl_copts +
+            select({
+                ":is_x86_64": ["-I external/musl/arch/x86_64"],
+                ":is_aarch64": ["-I external/musl/arch/aarch64"],
+                ":is_arm": ["-I external/musl/arch/arm"],
+                ":is_i386": ["-I external/musl/arch/i386"],
+                "//conditions:default": [],
+            }) + [
+        "-I external/musl/src/internal",
+        "-I $(GENDIR)/external/musl/src/internal",
+        "-I external/musl/src/include",
+        "-I external/musl/arch/generic",
+        "-fno-lto",
+    ],
+    includes = [
+        "include",
+    ],
+    linkstatic = True,
+    visibility = ["//visibility:public"],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "Scrt1",
+    srcs = [
+        "crt/Scrt1.c",
+        ":alltypes",
+    ] + glob(["**/*.h"]),
+    hdrs = glob(["include/**/*.h"]),
+    copts = musl_copts +
+            select({
+                ":is_x86_64": ["-I external/musl/arch/x86_64"],
+                ":is_aarch64": ["-I external/musl/arch/aarch64"],
+                ":is_arm": ["-I external/musl/arch/arm"],
+                ":is_i386": ["-I external/musl/arch/i386"],
+                "//conditions:default": [],
+            }) + [
+        "-I external/musl/src/internal",
+        "-I $(GENDIR)/external/musl/src/internal",
+        "-I external/musl/src/include",
+        "-I external/musl/arch/generic",
+        "-fno-lto",
+    ],
+    includes = [
+        "include",
+    ],
+    linkstatic = True,
+    textual_hdrs = [
+        "crt/crt1.c",
+    ],
+    visibility = ["//visibility:public"],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "rcrt1",
+    srcs = [
+        "crt/rcrt1.c",
+        ":alltypes",
+    ] + glob(["**/*.h"]),
+    hdrs = glob(["include/**/*.h"]),
+    copts = musl_copts +
+            select({
+                ":is_x86_64": ["-I external/musl/arch/x86_64"],
+                ":is_aarch64": ["-I external/musl/arch/aarch64"],
+                ":is_arm": ["-I external/musl/arch/arm"],
+                ":is_i386": ["-I external/musl/arch/i386"],
+                "//conditions:default": [],
+            }) + [
+        "-I external/musl/src/internal",
+        "-I $(GENDIR)/external/musl/src/internal",
+        "-I external/musl/src/include",
+        "-I external/musl/arch/generic",
+        "-fno-lto",
+    ],
+    includes = [
+        "include",
+    ],
+    linkstatic = True,
+    textual_hdrs = [
+        "ldso/dlstart.c",
+    ],
     visibility = ["//visibility:public"],
     alwayslink = True,
 )
@@ -197,9 +335,23 @@ cc_library(
         "-I $(GENDIR)/external/musl/src/internal",
         "-I external/musl/src/include",
         "-I external/musl/arch/generic",
+        "-Wno-unused-command-line-argument",
+        "-Wno-string-plus-int",
+        "-Wno-ignored-attributes",
     ],
     includes = ["include"],
-    linkstatic = True,
+    linkopts = select(
+        {
+            ":static_mode_build_pic": ["-static-pie"],
+            ":static_mode_build": ["-static"],
+            "//conditions:default": [],
+        },
+    ),
+    linkstatic = select({
+        ":static_mode_build_pic": True,
+        ":static_mode_build": True,
+        "//conditions:default": False,
+    }),
     textual_hdrs = select(
         {
             ":is_aarch64": [
@@ -225,4 +377,11 @@ cc_library(
         },
     ),
     visibility = ["//visibility:public"],
+    deps = select({
+        ":static_mode_build_pic": [":rcrt1"],
+        "//conditions:default": [":Scrt1"],
+    }) + [
+        ":crti",
+        ":crtn",
+    ],
 )
